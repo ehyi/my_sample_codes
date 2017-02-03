@@ -1,0 +1,113 @@
+log_format upstreamlog '[$time_local] $remote_addr - $request_uri $query_string $remote_user - $server_name to: $upstream_addr: $request upstream_response_time $upstream_response_time msec $msec request_time $request_time';
+
+upstream api_server {
+    server api.mydomain.com;
+}
+
+server {
+    listen 80; # default_server; # ipv4
+    #listen [::]:80 default_server;
+    #server_name ohw.mydomain.com;
+    return 302 https://$host$request_uri;
+}
+
+server {
+
+    server_name ohw.mydomain.com;
+
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+
+    ssl on;
+    ssl_certificate /etc/nginx/ssl/mydomain.crt;
+    ssl_certificate_key /etc/nginx/ssl/mydomain.key;
+    ssl_prefer_server_ciphers on;
+
+    proxy_read_timeout 3600;
+    root /srv/ohw;
+    index index.html;
+    disable_symlinks off;
+
+    resolver 8.8.8.8;
+    rewrite_log on;
+    access_log /var/log/nginx/access.log upstreamlog;
+
+    error_page 404 /404.html;
+    error_page 502 /maintenance.html;
+    error_page 500 502 503 504 /50x.html;
+
+    charset utf-8;
+
+    location / {
+    	try_files $uri /index.html;
+    }
+
+    location ^~ /api/order/ {
+    	proxy_pass https://www.mydomain.com/order/order.php/;
+    	proxy_cookie_domain .mydomain.com .mydomain.com;
+    	proxy_set_header Host www.mydomain.com;
+     	proxy_pass_header Set-Cookie;
+    }
+
+    location ^~ /api/trial/ {
+      proxy_pass https://www.mydomain.com/trial/trialendpt.php/;
+      proxy_cookie_domain .mydomain.com .mydomain.com;
+      proxy_set_header Host www.mydomain.com;
+      proxy_pass_header Set-Cookie;
+    }
+
+    #location ^~ /api/test-trial/ {
+    #  proxy_pass https://test-ohw.mydomain.com/rest/test_trial/trial/trialendpt.php/;
+    #  proxy_cookie_domain .mydomain.com .mydomain.com;
+    #  proxy_set_header Host test-ohw.mydomain.com;
+    #  proxy_pass_header Set-Cookie;
+    #}
+    location ^~ /api/login/ {
+    	proxy_pass https://www.mydomain.com/rest/;
+    	proxy_cookie_domain .mydomain.com .mydomain.com;
+    	proxy_set_header Host www.mydomain.com;
+     	proxy_pass_header Set-Cookie;
+    }
+		
+    location ^~ /api/endpoint/ {
+    	proxy_pass https://api.mydomain.com/rest/endpoint.php/;
+    	proxy_cookie_domain .mydomain.com .mydomain.com;
+    	proxy_set_header Host api.mydomain.com;
+     	proxy_pass_header Set-Cookie;
+    }
+    location ^~ /api/rest/ {
+    	proxy_pass https://api.mydomain.com/rest/rest.php/;
+    	proxy_cookie_domain .mydomain.com .mydomain.com;
+    	proxy_set_header Host api.mydomain.com;
+      proxy_pass_header Set-Cookie;
+    }
+
+    location ^~ /books/student {
+      proxy_pass https://api.mydomain.com/$request_uri;
+      proxy_cookie_domain .mydomain.com .mydomain.com;
+      proxy_set_header Host api.mydomain.com;
+      proxy_pass_header Set-Cookie;
+    }
+
+    location ^~ /books/content {
+      proxy_pass https://api.mydomain.com/$request_uri;
+      proxy_cookie_domain .mydomain.com .mydomain.com;
+      proxy_set_header Host api.mydomain.com;
+      proxy_pass_header Set-Cookie;
+    }
+
+    location ^~ /books/teacher {
+      proxy_pass https://api.mydomain.com/$request_uri;
+      proxy_cookie_domain .mydomain.com .mydomain.com;
+      proxy_set_header Host api.mydomain.com;
+      proxy_pass_header Set-Cookie;
+    }
+
+    location ^~ /build-notifications {
+      proxy_pass https://localhost:6712;
+      proxy_set_header  X-Real-IP $remote_addr;
+      proxy_set_header  Host      $http_host;
+    }
+
+}
+

@@ -1,0 +1,602 @@
+select * from pg_trigger where tgname like 'tr_%';
+--drop trigger tr_archive_users on users
+select proname from pg_proc where proname like 'fn_archive%';
+
+$ createdb -U postgres -p 6432 archive_mytestdatabase
+$ createdb -U postgres -p 6432 archive_mylivedatabase   <- FOR LIVE
+postgres=# CREATE USER archive_user WITH PASSWORD '*****';
+postgres=# ALTER USER archive_user  WITH PASSWORD '*****';
+postgres=# GRANT CONNECT ON DATABASE archive_mytestdatabase TO archive_user;
+postgres=# GRANT ALL PRIVILEGES ON DATABASE archive_mytestdatabase TO archive_user;
+postgres=# GRANT CONNECT ON DATABASE archive_mylivedatabase TO archive_user;           <- FOR LIVE
+postgres=# GRANT ALL PRIVILEGES ON DATABASE archive_mylivedatabase TO archive_user;    <- FOR LIVE
+
+If you get:
+    ERROR:  function dblink_connect(unknown, unknown) does not exist
+    LINE 1: SELECT dblink_connect('archiveconn', 'port=6432 dbname=archi...
+               ^
+do
+    mylivedatabase=# CREATE EXTENSION dblink; (as postgres user)
+
+/db/pgsql/9.3/data/pg_hba.conf:
+    local   all             postgres                                trust
+    local   all             postgresuser                            trust
+    local   all             archive_user                            md5
+
+service postgresql-9.3 restart
+
+
+-- users
+
+CREATE OR REPLACE FUNCTION fn_archive_users() RETURNS TRIGGER 
+    AS $BODY$
+    DECLARE
+        sqlcommand TEXT := '';
+    BEGIN
+        sqlcommand := 'insert into archive_users (
+        archive_datetime, 
+        user_id, 
+        email, 
+        password, 
+        first_name, 
+        last_name, 
+        home_phone, 
+        work_phone, 
+        cell_phone, 
+        address1, 
+        address2, 
+        city, 
+        state, 
+        country, 
+        timezone, 
+        usertype, 
+        zipcode, 
+        webaccess_id, 
+        webaccess_has_verified, 
+        webaccess_verify_expire, 
+        webaccess_verify_pass, 
+        last_bookscores_update, 
+        wscid,
+        hwpw,
+        wapw,
+        waemail,
+        wauid,
+        trapped,
+        escapeans,
+        has_verified,
+        num_email_changes,
+        verify_expire,
+        verify_pass,
+        security_q_1,
+        security_a_1,
+        security_q_2,
+        security_a_2
+        ) values (' ||
+        '''' || now() || ''',' || 
+        OLD.user_id || ',' || 
+        quote_nullable(OLD.email) || ',' || 
+        quote_nullable(OLD.password) || ',' || 
+        quote_nullable(OLD.first_name) || ',' || 
+        quote_nullable(OLD.last_name) || ',' || 
+        quote_nullable(OLD.home_phone) || ',' || 
+        quote_nullable(OLD.work_phone) || ',' || 
+        quote_nullable(OLD.cell_phone) || ',' || 
+        quote_nullable(OLD.address1) || ',' || 
+        quote_nullable(OLD.address2) || ',' || 
+        quote_nullable(OLD.city) || ',' || 
+        quote_nullable(OLD.state) || ',' || 
+        quote_nullable(OLD.country) || ',' || 
+        quote_nullable(OLD.timezone) || ',' || 
+        quote_nullable(OLD.usertype) || ',' || 
+        quote_nullable(OLD.zipcode) || ',' || 
+        quote_nullable(OLD.webaccess_id) || ',' || 
+        quote_nullable(OLD.webaccess_has_verified) || ',' || 
+        quote_nullable(OLD.webaccess_verify_expire) || ',' || 
+        quote_nullable(OLD.webaccess_verify_pass) || ',' || 
+        quote_nullable(OLD.last_bookscores_update) || ',' || 
+        quote_nullable(OLD.wscid) || ',' || 
+        quote_nullable(OLD.hwpw) || ',' || 
+        quote_nullable(OLD.wapw) || ',' || 
+        quote_nullable(OLD.waemail) || ',' || 
+        quote_nullable(OLD.wauid) || ',' || 
+        quote_nullable(OLD.trapped) || ',' || 
+        quote_nullable(OLD.escapeans) || ',' || 
+        quote_nullable(OLD.has_verified) || ',' || 
+        quote_nullable(OLD.num_email_changes) || ',' || 
+        quote_nullable(OLD.verify_expire) || ',' || 
+        quote_nullable(OLD.verify_pass) || ',' || 
+        quote_nullable(OLD.security_q_1) || ',' || 
+        quote_nullable(OLD.security_a_1) || ',' || 
+        quote_nullable(OLD.security_q_2) || ',' || 
+        quote_nullable(OLD.security_a_2) || 
+        ')';
+
+        -- raise notice 'sqlcommand: %', sqlcommand;
+        
+        perform dblink_connect('archiveconn', 'port=6432 dbname=archive_mylivedatabase user=archive_user password=*****');
+        perform dblink_exec('archiveconn', sqlcommand);     
+        perform dblink_disconnect('archiveconn');        
+       
+        RETURN OLD;
+    END;
+    $BODY$ LANGUAGE plpgsql VOLATILE;    
+    
+CREATE TRIGGER tr_archive_users
+    BEFORE DELETE ON users
+    FOR EACH ROW 
+    EXECUTE PROCEDURE fn_archive_users();
+
+    
+-- student_problem_sets
+
+CREATE OR REPLACE FUNCTION fn_archive_student_problem_sets() RETURNS TRIGGER 
+    AS $BODY$
+    DECLARE
+        sqlcommand TEXT := '';
+    BEGIN
+        sqlcommand := 'insert into archive_student_problem_sets (
+        archive_datetime, 
+        sps_id,
+        user_id,
+        problem_set_id,
+        live,
+        date_due,
+        local,
+        donets
+        ) values (' ||
+        '''' || now() || ''',' || 
+        OLD.sps_id || ',' || 
+        quote_nullable(OLD.user_id) || ',' || 
+        quote_nullable(OLD.problem_set_id) || ',' || 
+        quote_nullable(OLD.live) || ',' || 
+        quote_nullable(OLD.date_due) || ',' || 
+        quote_nullable(OLD.local) || ',' || 
+        quote_nullable(OLD.donets) || 
+        ')';
+
+        -- raise notice 'sqlcommand: %', sqlcommand;
+        
+        perform dblink_connect('archiveconn', 'port=6432 dbname=archive_mylivedatabase user=archive_user password=*****');
+        perform dblink_exec('archiveconn', sqlcommand);     
+        perform dblink_disconnect('archiveconn');        
+       
+        RETURN OLD;
+    END;
+    $BODY$ LANGUAGE plpgsql VOLATILE;    
+    
+CREATE TRIGGER tr_student_problem_sets
+    BEFORE DELETE ON student_problem_sets
+    FOR EACH ROW 
+    EXECUTE PROCEDURE fn_archive_student_problem_sets();
+    
+
+-- student_problem_variables    
+    
+CREATE OR REPLACE FUNCTION fn_archive_student_problem_variables() RETURNS TRIGGER 
+    AS $BODY$
+    DECLARE
+        sqlcommand TEXT := '';
+    BEGIN
+        sqlcommand := 'insert into archive_student_problem_variables (
+        archive_datetime, 
+        spv_id,
+        user_id,
+        problem_set_id,
+        problem_id,
+        version,
+        puser_id,
+        label,
+        val,
+        strval,
+        psp_id
+        ) values (' ||
+        '''' || now() || ''',' || 
+        OLD.spv_id || ',' || 
+        quote_nullable(OLD.user_id) || ',' || 
+        quote_nullable(OLD.problem_set_id) || ',' || 
+        quote_nullable(OLD.problem_id) || ',' || 
+        quote_nullable(OLD.version) || ',' || 
+        quote_nullable(OLD.puser_id) || ',' || 
+        quote_nullable(OLD.label) || ',' || 
+        quote_nullable(OLD.val) || ',' || 
+        quote_nullable(OLD.strval) || ',' || 
+        quote_nullable(OLD.psp_id) || 
+        ')';
+
+        -- raise notice 'sqlcommand: %', sqlcommand;
+        
+        perform dblink_connect('archiveconn', 'port=6432 dbname=archive_mylivedatabase user=archive_user password=*****');
+        perform dblink_exec('archiveconn', sqlcommand);     
+        perform dblink_disconnect('archiveconn');        
+       
+        RETURN OLD;
+    END;
+    $BODY$ LANGUAGE plpgsql VOLATILE;    
+    
+CREATE TRIGGER tr_student_problem_variables
+    BEFORE DELETE ON student_problem_variables
+    FOR EACH ROW 
+    EXECUTE PROCEDURE fn_archive_student_problem_variables();    
+    
+    
+-- student_answers_log
+
+CREATE OR REPLACE FUNCTION fn_archive_student_answers_log() RETURNS TRIGGER 
+    AS $BODY$
+    DECLARE
+        sqlcommand TEXT := '';
+    BEGIN
+        sqlcommand := 'insert into archive_student_answers_log (
+        archive_datetime, 
+        sal_id,
+        user_id,
+        problem_set_id,
+        problem_id,
+        version,
+        puser_id,
+        problem_part_id,
+        answer,
+        live,
+        calc_grade,
+        grade,
+        iteration,
+        date_submitted,
+        qp_id,
+        seed
+        ) values (' ||
+        '''' || now() || ''',' || 
+        OLD.sal_id || ',' || 
+        quote_nullable(OLD.user_id) || ',' || 
+        quote_nullable(OLD.problem_set_id) || ',' || 
+        quote_nullable(OLD.problem_id) || ',' || 
+        quote_nullable(OLD.version) || ',' || 
+        quote_nullable(OLD.puser_id) || ',' || 
+        quote_nullable(OLD.problem_part_id) || ',' || 
+        quote_nullable(OLD.answer) || ',' || 
+        quote_nullable(OLD.live) || ',' || 
+        quote_nullable(OLD.calc_grade) || ',' || 
+        quote_nullable(OLD.grade) || ',' || 
+        quote_nullable(OLD.iteration) || ',' || 
+        quote_nullable(OLD.date_submitted) || ',' || 
+        quote_nullable(OLD.qp_id) || ',' || 
+        quote_nullable(OLD.seed) || 
+        ')';
+
+        -- raise notice 'sqlcommand: %', sqlcommand;
+        
+        perform dblink_connect('archiveconn', 'port=6432 dbname=archive_mylivedatabase user=archive_user password=*****');
+        perform dblink_exec('archiveconn', sqlcommand);     
+        perform dblink_disconnect('archiveconn');        
+       
+        RETURN OLD;
+    END;
+    $BODY$ LANGUAGE plpgsql VOLATILE;    
+    
+CREATE TRIGGER tr_student_answers_log
+    BEFORE DELETE ON student_answers_log
+    FOR EACH ROW 
+    EXECUTE PROCEDURE fn_archive_student_answers_log();   
+
+
+-- student_answers
+
+CREATE OR REPLACE FUNCTION fn_archive_student_answers() RETURNS TRIGGER 
+    AS $BODY$
+    DECLARE
+        sqlcommand TEXT := '';
+    BEGIN
+        sqlcommand := 'insert into archive_student_answers (
+        archive_datetime, 
+        sa_id,
+        user_id,
+        problem_set_id,
+        problem_id,
+        version,
+        puser_id,
+        problem_part_id,
+        answer,
+        live,
+        calc_grade,
+        grade,
+        iteration,
+        qp_id,
+        grade_lock,
+        seed,
+        pending
+        ) values (' ||
+        '''' || now() || ''',' || 
+        OLD.sa_id || ',' || 
+        quote_nullable(OLD.user_id) || ',' || 
+        quote_nullable(OLD.problem_set_id) || ',' || 
+        quote_nullable(OLD.problem_id) || ',' || 
+        quote_nullable(OLD.version) || ',' || 
+        quote_nullable(OLD.puser_id) || ',' || 
+        quote_nullable(OLD.problem_part_id) || ',' || 
+        quote_nullable(OLD.answer) || ',' || 
+        quote_nullable(OLD.live) || ',' || 
+        quote_nullable(OLD.calc_grade) || ',' || 
+        quote_nullable(OLD.grade) || ',' || 
+        quote_nullable(OLD.iteration) || ',' || 
+        quote_nullable(OLD.qp_id) || ',' || 
+        quote_nullable(OLD.grade_lock) || ',' || 
+        quote_nullable(OLD.seed) || ',' || 
+        quote_nullable(OLD.pending) || 
+        ')';
+
+        -- raise notice 'sqlcommand: %', sqlcommand;
+        
+        perform dblink_connect('archiveconn', 'port=6432 dbname=archive_mylivedatabase user=archive_user password=*****');
+        perform dblink_exec('archiveconn', sqlcommand);     
+        perform dblink_disconnect('archiveconn');        
+       
+        RETURN OLD;
+    END;
+    $BODY$ LANGUAGE plpgsql VOLATILE;    
+    
+CREATE TRIGGER tr_student_answers
+    BEFORE DELETE ON student_answers
+    FOR EACH ROW 
+    EXECUTE PROCEDURE fn_archive_student_answers(); 
+    
+
+-- student_problem_grades
+
+CREATE OR REPLACE FUNCTION fn_archive_student_problem_grades() RETURNS TRIGGER 
+    AS $BODY$
+    DECLARE
+        sqlcommand TEXT := '';
+    BEGIN
+        sqlcommand := 'insert into archive_student_problem_grades (
+        archive_datetime, 
+        spg_id,
+        user_id,
+        problem_set_id,
+        problem_id,
+        version,
+        puser_id,
+        calc_grade,
+        grade,
+        qp_id,
+        streak_max,
+        streak_current
+        ) values (' ||
+        '''' || now() || ''',' || 
+        OLD.spg_id || ',' || 
+        quote_nullable(OLD.user_id) || ',' || 
+        quote_nullable(OLD.problem_set_id) || ',' || 
+        quote_nullable(OLD.problem_id) || ',' || 
+        quote_nullable(OLD.version) || ',' || 
+        quote_nullable(OLD.puser_id) || ',' || 
+        quote_nullable(OLD.calc_grade) || ',' || 
+        quote_nullable(OLD.grade) || ',' || 
+        quote_nullable(OLD.qp_id) || ',' || 
+        quote_nullable(OLD.streak_max) || ',' || 
+        quote_nullable(OLD.streak_current) ||
+        ')';
+
+        -- raise notice 'sqlcommand: %', sqlcommand;
+        
+        perform dblink_connect('archiveconn', 'port=6432 dbname=archive_mylivedatabase user=archive_user password=*****');
+        perform dblink_exec('archiveconn', sqlcommand);     
+        perform dblink_disconnect('archiveconn');        
+       
+        RETURN OLD;
+    END;
+    $BODY$ LANGUAGE plpgsql VOLATILE;    
+    
+CREATE TRIGGER tr_student_problem_grades
+    BEFORE DELETE ON student_problem_grades
+    FOR EACH ROW 
+    EXECUTE PROCEDURE fn_archive_student_problem_grades(); 
+    
+
+-- student_grades
+    
+CREATE OR REPLACE FUNCTION fn_archive_student_grades() RETURNS TRIGGER 
+    AS $BODY$
+    DECLARE
+        sqlcommand TEXT := '';
+    BEGIN
+        sqlcommand := 'insert into archive_student_grades (
+        archive_datetime, 
+        sg_id,
+        user_id,
+        problem_set_id,
+        grade
+        ) values (' ||
+        '''' || now() || ''',' || 
+        OLD.sg_id || ',' || 
+        quote_nullable(OLD.user_id) || ',' || 
+        quote_nullable(OLD.problem_set_id) || ',' || 
+        quote_nullable(OLD.grade) ||
+        ')';
+
+        -- raise notice 'sqlcommand: %', sqlcommand;
+        
+        perform dblink_connect('archiveconn', 'port=6432 dbname=archive_mylivedatabase user=archive_user password=*****');
+        perform dblink_exec('archiveconn', sqlcommand);     
+        perform dblink_disconnect('archiveconn');        
+       
+        RETURN OLD;
+    END;
+    $BODY$ LANGUAGE plpgsql VOLATILE;    
+    
+CREATE TRIGGER tr_student_grades
+    BEFORE DELETE ON student_grades
+    FOR EACH ROW 
+    EXECUTE PROCEDURE fn_archive_student_grades();     
+    
+    
+------------------------------------------------------------------------------- 
+ TABLES
+------------------------------------------------------------------------------- 
+
+    users;
+    student_problem_sets;
+    student_problem_variables;
+    student_answers_log;
+    student_answers;
+    student_problem_grades;
+    student_grades;
+
+CREATE TABLE archive_users
+(
+    archive_datetime timestamp,
+    user_id int,
+    email text,
+    password varchar(255),
+    first_name text,
+    last_name text,
+    home_phone text,
+    work_phone text,
+    cell_phone text,
+    address1 text,
+    address2 text,
+    city text,
+    state text,
+    country text,
+    timezone varchar(6),
+    usertype int,
+    zipcode text,
+    webaccess_id int,
+    webaccess_has_verified boolean,
+    webaccess_verify_expire timestamp,
+    webaccess_verify_pass varchar(32),
+    last_bookscores_update timestamp,
+    wscid int,
+    hwpw text,
+    wapw text,
+    waemail text,
+    wauid int,
+    trapped boolean,
+    escapeans varchar(32),
+    has_verified boolean,
+    num_email_changes int,
+    verify_expire timestamp,
+    verify_pass varchar(32),
+    security_q_1 text,
+    security_a_1 text,
+    security_q_2 text,
+    security_a_2 text,
+	CONSTRAINT users_pkey PRIMARY KEY (user_id)
+)
+WITH (
+  OIDS=FALSE
+);
+
+CREATE TABLE archive_student_problem_sets
+(
+    archive_datetime timestamp,
+    sps_id int,
+    user_id int,
+    problem_set_id int,
+    live boolean,
+    date_due timestamp,
+    local boolean,
+    donets timestamp,
+	CONSTRAINT student_problem_sets_pkey PRIMARY KEY (sps_id)
+)
+WITH (
+  OIDS=FALSE
+);
+
+CREATE TABLE archive_student_problem_variables
+(
+    archive_datetime timestamp,
+    spv_id integer,
+    user_id integer,
+    problem_set_id integer,
+    problem_id integer,
+    version numeric(6,2),
+    puser_id integer,
+    label character varying(32),
+    val numeric,
+    strval character varying(128),
+    psp_id integer,
+	CONSTRAINT student_problem_variables_pkey PRIMARY KEY (spv_id)
+)
+WITH (
+  OIDS=FALSE
+);
+
+CREATE TABLE archive_student_answers_log
+(
+    archive_datetime timestamp,
+    sal_id integer,
+    user_id integer,
+    problem_set_id integer,
+    problem_id integer,
+    version numeric(6,2),
+    puser_id integer,
+    problem_part_id integer,
+    answer text,
+    live boolean,
+    calc_grade numeric(6,2),
+    grade numeric(6,2),
+    iteration integer,
+    date_submitted timestamp,
+    qp_id integer,
+    seed bigint,
+	CONSTRAINT student_answers_log_pkey PRIMARY KEY (sal_id)
+)
+WITH (
+  OIDS=FALSE
+);
+
+CREATE TABLE archive_student_answers
+(
+    archive_datetime timestamp,
+    sa_id integer,
+    user_id integer,
+    problem_set_id integer,
+    problem_id integer,
+    version numeric(6,2),
+    puser_id integer,
+    problem_part_id integer,
+    answer text,
+    live boolean,
+    calc_grade numeric(6,2),
+    grade numeric(6,2),
+    iteration integer,
+    qp_id integer,
+    grade_lock boolean,
+    seed bigint,
+    pending boolean,
+	CONSTRAINT student_answers_pkey PRIMARY KEY (sa_id)
+)
+WITH (
+  OIDS=FALSE
+);
+
+CREATE TABLE archive_student_problem_grades
+(
+    archive_datetime timestamp,
+    spg_id integer,
+    user_id integer,
+    problem_set_id integer,
+    problem_id integer,
+    version integer,
+    puser_id integer,
+    calc_grade numeric(6,2),
+    grade numeric(6,2),
+    qp_id integer,
+    streak_max integer,
+    streak_current integer,
+	CONSTRAINT student_problem_grades2_pkey PRIMARY KEY (spg_id)
+)
+WITH (
+  OIDS=FALSE
+);
+
+CREATE TABLE archive_student_grades
+(
+    archive_datetime timestamp,
+    sg_id integer,
+    user_id integer,
+    problem_set_id integer,
+    grade numeric(6,2),
+	CONSTRAINT student_grades_pkey PRIMARY KEY (sg_id)
+)
+WITH (
+  OIDS=FALSE
+);
